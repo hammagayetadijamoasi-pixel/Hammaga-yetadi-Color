@@ -1,0 +1,215 @@
+<!DOCTYPE html>
+<html lang="uz">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>Pro Color Picker</title>
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/color-thief/2.3.2/color-thief.umd.js"></script>
+    <style>
+        :root { --primary: #3390ec; --bg: #ffffff; --text: #000000; }
+        body {
+            font-family: -apple-system, sans-serif;
+            background: var(--tg-theme-bg-color, #fff);
+            color: var(--tg-theme-text-color, #000);
+            padding: 15px; margin: 0;
+            display: flex; flex-direction: column; align-items: center;
+        }
+        .card {
+            background: var(--tg-theme-secondary-bg-color, #f0f0f0);
+            border-radius: 12px; padding: 15px; width: 100%; box-sizing: border-box; margin-bottom: 15px;
+        }
+        .color-display {
+            width: 100%; height: 100px; border-radius: 12px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.1); margin-bottom: 15px;
+            transition: background 0.3s;
+        }
+        .info-row { display: flex; justify-content: space-between; margin-bottom: 8px; font-size: 14px; }
+        .info-label { opacity: 0.7; }
+        .info-value { font-family: monospace; font-weight: bold; }
+        
+        input[type="color"] { width: 100%; height: 50px; border: none; background: none; cursor: pointer; }
+        
+        .btn {
+            background: var(--primary); color: white; border: none; padding: 12px;
+            border-radius: 8px; width: 100%; font-size: 16px; cursor: pointer; text-align: center;
+        }
+        canvas { max-width: 100%; border-radius: 8px; display: none; margin-top: 10px; }
+        
+        .palette { display: flex; gap: 5px; margin-top: 10px; }
+        .p-color { width: 100%; height: 40px; border-radius: 6px; cursor: pointer; }
+
+        .tabs { display: flex; gap: 10px; margin-bottom: 15px; width: 100%; }
+        .tab { flex: 1; padding: 8px; text-align: center; background: #eee; border-radius: 8px; cursor: pointer; font-size: 14px;}
+        .tab.active { background: var(--primary); color: white; }
+        
+        .hidden { display: none; }
+    </style>
+</head>
+<body>
+
+    <div class="tabs">
+        <div class="tab active" onclick="switchTab('solid')">🎨 Solid</div>
+        <div class="tab" onclick="switchTab('image')">📷 Rasm</div>
+    </div>
+
+    <div class="color-display" id="mainPreview" style="background: #3390ec;"></div>
+
+    <div class="card">
+        <div class="info-row"><span class="info-label">HEX</span><span class="info-value" id="hexVal">#3390EC</span></div>
+        <div class="info-row"><span class="info-label">RGB</span><span class="info-value" id="rgbVal">rgb(51, 144, 236)</span></div>
+        <div class="info-row"><span class="info-label">HSL</span><span class="info-value" id="hslVal">hsl(210, 82%, 56%)</span></div>
+        <div class="info-row"><span class="info-label">CMYK</span><span class="info-value" id="cmykVal">78, 39, 0, 7</span></div>
+    </div>
+
+    <div id="solidSection">
+        <div class="card">
+            <label>Rang tanlash</label>
+            <input type="color" id="nativePicker" value="#3390ec">
+        </div>
+    </div>
+
+    <div id="imageSection" class="hidden">
+        <div class="card">
+            <label class="btn">
+                🖼 Rasm Yuklash
+                <input type="file" id="imgInput" accept="image/*" style="display:none">
+            </label>
+            <canvas id="canvas"></canvas>
+            <p style="font-size: 12px; text-align: center; color: gray;">Rang olish uchun rasm ustiga bosing</p>
+            
+            <h4>Dominant Palitra:</h4>
+            <div class="palette" id="paletteBox"></div>
+        </div>
+    </div>
+
+<script>
+    const tg = window.Telegram.WebApp;
+    tg.expand();
+    const colorThief = new ColorThief();
+
+    let currentColor = { r: 51, g: 144, b: 236, hex: "#3390EC" };
+
+    // Elements
+    const preview = document.getElementById('mainPreview');
+    const nativePicker = document.getElementById('nativePicker');
+    const canvas = document.getElementById('canvas');
+    const ctx = canvas.getContext('2d');
+
+    // Setup Main Button
+    tg.MainButton.text = "✅ Rangni Tasdiqlash";
+    tg.MainButton.show();
+    tg.MainButton.onClick(() => {
+        // Ma'lumotni botga yuborish
+        const data = {
+            hex: currentColor.hex,
+            rgb: `rgb(${currentColor.r}, ${currentColor.g}, ${currentColor.b})`,
+            cmyk: document.getElementById('cmykVal').innerText,
+            hsl: document.getElementById('hslVal').innerText
+        };
+        tg.sendData(JSON.stringify(data));
+    });
+
+    // Tab Switching
+    function switchTab(tab) {
+        document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+        if(tab === 'solid') {
+            document.querySelector('.tab:nth-child(1)').classList.add('active');
+            document.getElementById('solidSection').classList.remove('hidden');
+            document.getElementById('imageSection').classList.add('hidden');
+        } else {
+            document.querySelector('.tab:nth-child(2)').classList.add('active');
+            document.getElementById('solidSection').classList.add('hidden');
+            document.getElementById('imageSection').classList.remove('hidden');
+        }
+    }
+
+    // Color Logic
+    function updateUI(r, g, b) {
+        currentColor = { r, g, b, hex: rgbToHex(r, g, b) };
+        
+        preview.style.background = `rgb(${r},${g},${b})`;
+        nativePicker.value = currentColor.hex;
+        
+        document.getElementById('hexVal').innerText = currentColor.hex.toUpperCase();
+        document.getElementById('rgbVal').innerText = `rgb(${r}, ${g}, ${b})`;
+        document.getElementById('hslVal').innerText = rgbToHsl(r, g, b);
+        document.getElementById('cmykVal').innerText = rgbToCmyk(r, g, b);
+    }
+
+    nativePicker.addEventListener('input', (e) => {
+        const hex = e.target.value;
+        const rgb = hexToRgbObj(hex);
+        updateUI(rgb.r, rgb.g, rgb.b);
+    });
+
+    // Image & Pipette Logic
+    document.getElementById('imgInput').addEventListener('change', function(e) {
+        const reader = new FileReader();
+        reader.onload = function(event) {
+            const img = new Image();
+            img.onload = function() {
+                canvas.width = 320;
+                canvas.height = 320 * (img.height / img.width);
+                ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+                canvas.style.display = 'block';
+                
+                // Extract Palette
+                try {
+                    const palette = colorThief.getPalette(img, 5);
+                    const pBox = document.getElementById('paletteBox');
+                    pBox.innerHTML = '';
+                    palette.forEach(c => {
+                        const div = document.createElement('div');
+                        div.className = 'p-color';
+                        div.style.background = `rgb(${c[0]}, ${c[1]}, ${c[2]})`;
+                        div.onclick = () => updateUI(c[0], c[1], c[2]);
+                        pBox.appendChild(div);
+                    });
+                } catch(e) { console.log(e); }
+            }
+            img.src = event.target.result;
+        }
+        reader.readAsDataURL(e.target.files[0]);
+    });
+
+    canvas.addEventListener('click', (e) => {
+        const rect = canvas.getBoundingClientRect();
+        const x = e.clientX - rect.left;
+        const y = e.clientY - rect.top;
+        const p = ctx.getImageData(x, y, 1, 1).data;
+        updateUI(p[0], p[1], p[2]);
+    });
+
+    // Helpers
+    function rgbToHex(r, g, b) {
+        return "#" + ((1 << 24) + (r << 16) + (g << 8) + b).toString(16).slice(1);
+    }
+    function hexToRgbObj(hex) {
+        const bigint = parseInt(hex.substring(1), 16);
+        return { r: (bigint >> 16) & 255, g: (bigint >> 8) & 255, b: bigint & 255 };
+    }
+    function rgbToHsl(r, g, b) {
+        r /= 255; g /= 255; b /= 255;
+        const max = Math.max(r, g, b), min = Math.min(r, g, b);
+        let h, s, l = (max + min) / 2;
+        if (max === min) { h = s = 0; } else {
+            const d = max - min;
+            s = l > 0.5 ? d / (2 - max - min) : d / (max + min);
+            switch (max) {
+                case r: h = (g - b) / d + (g < b ? 6 : 0); break;
+                case g: h = (b - r) / d + 2; break;
+                case b: h = (r - g) / d + 4; break;
+            }
+            h /= 6;
+        }
+        return `hsl(${Math.round(h * 360)}, ${Math.round(s * 100)}%, ${Math.round(l * 100)}%)`;
+    }
+    function rgbToCmyk(r, g, b) {
+        let c = 1 - (r / 255), m = 1 - (g / 255), y = 1 - (b / 255), k = Math.min(c, m, y);
+        c = (c - k) / (1 - k) || 0; m = (m - k) / (1 - k) || 0; y = (y - k) / (1 - k) || 0;
+        return `${Math.round(c*100)}, ${Math.round(m*100)}, ${Math.round(y*100)}, ${Math.round(k*100)}`;
+    }
+</script>
+</body>
+</html>
